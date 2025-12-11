@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>picaso せっていがめん</title>
+    <link href="https://fonts.googleapis.com/css?family=Noto+Sans+JP" rel="stylesheet" />
+    <link rel="stylesheet" href="./css/picaso.css">
+<body>
+    <div id="main_settei">
+        <input type="text" id="name" placeholder="がはくのなまえ">
+    
+        <select name="time_option" id="time_option">
+            <option value="" disabled selected>--せいげんじかん--</option>
+            <option value="20" >20びょう</option>
+            <option value="30" >30びょう</option>
+            <option value="40" >40びょう</option>
+        </select>
+
+        <button id="make_atelier">アトリエをつくる</button>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+
+        // DBに対してデータの追加や取得ができるようにする
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            serverTimestamp,
+            onSnapshot,
+        } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "",
+            authDomain: "picaso-93617.firebaseapp.com",
+            projectId: "picaso-93617",
+            storageBucket: "picaso-93617.firebasestorage.app",
+            messagingSenderId: "347456870584",
+            appId: "1:347456870584:web:1952358594e673580efc4d"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+
+        // 変数DBにfirestoreのインスタンスを入れる
+        const db = getFirestore(app);
+
+        // 部屋作成の関数
+        async function createNewRoom(drawerName, limitSeconds, viewerNames) {            
+            // roomデータの定義
+            const data = {
+                created_at: serverTimestamp(),
+                drawer_name: drawerName,
+                limit_seconds: limitSeconds,
+                start_time: null,    // 描画開始時に設定するためnull
+                status: "waiting",
+                viewer_names: viewerNames
+            };
+
+            try {
+                // addDocを実行し、新しく作成されたドキュメントの参照（DocumentReference）を受け取る
+                const docRef = await addDoc(collection(db, 'rooms'), data);
+                
+                // docRefから自動生成されたドキュメントIDを取得する
+                const newRoomId = docRef.id;
+                
+                // 作成されたIDを呼び出し元に返す
+                return newRoomId; 
+
+            } catch (e) {
+                console.error("ルーム作成中にエラーが発生しました: ", e);
+                throw e; // エラーを再スローし、呼び出し元に通知
+            }
+        }
+
+        $('#make_atelier').on('click',async function () {  
+            const drawer_name = $('#name').val();
+            const limit_seconds = $('#time_option').val();
+            const viewer_names = [];
+
+            try {
+                // await を使用し、非同期関数 createNewRoom の実行完了を待つ
+                // -> newRoomId に作成されたドキュメントIDが代入される
+                const newRoomId = await createNewRoom(
+                    drawer_name,
+                    limit_seconds,
+                    viewer_names
+                );
+
+                // 作成された部屋のURLを作成
+                const urlToNavigate = `atelier.html?roomId=${newRoomId}&user_type=drawer`;
+
+                // 作成された部屋に遷移
+                window.location.href = urlToNavigate; 
+
+                // 値をリセット
+                $('#name').val('');
+                $('#time_option').val('');
+
+            } catch (error) {
+                console.error("部屋の作成に失敗しました。", error);
+                alert("部屋の作成に失敗しました。コンソールを確認してください。");
+            }
+        });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>picaso_ともだちページ</title>
+    <link href="https://fonts.googleapis.com/css?family=Noto+Sans+JP" rel="stylesheet" />
+    <link rel="stylesheet" href="./css/picaso.css">
+<body>
+    <div id="main_settei">
+
+        <input type="text" id="enter_room_id" placeholder="おへやのID">
+
+        <input type="text" id="viewer_name" placeholder="あなたのなまえ">
+    
+        <button id="go_atelier">アトリエにはいる</button>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+
+        // DBに対してデータの追加や取得ができるようにする
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            serverTimestamp,
+            onSnapshot,
+            doc,
+            updateDoc,
+            arrayUnion,
+        } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "",
+            authDomain: "picaso-93617.firebaseapp.com",
+            projectId: "picaso-93617",
+            storageBucket: "picaso-93617.firebasestorage.app",
+            messagingSenderId: "347456870584",
+            appId: "1:347456870584:web:1952358594e673580efc4d"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+
+        // 変数DBにfirestoreのインスタンスを入れる
+        const db = getFirestore(app);
+
+        // 部屋ドキュメントの参照を取得
+        let currentRoomId = "";
+
+        $('#go_atelier').on('click', async function(){
+            const viewer_names = $('#viewer_name').val();
+            currentRoomId = $('#enter_room_id').val();
+                        
+            // 部屋の状態を更新
+            updateDoc(doc(db, 'rooms', currentRoomId), {
+                viewer_names: arrayUnion(viewer_names),
+            }).then(() => {
+                console.log("入室を開始しました (Firestore更新完了)。");
+                
+                // 作成された部屋のURLを作成
+                const urlToNavigate = `atelier_viewer.html?roomId=${currentRoomId}&user_type=viewer&user_name=${viewer_names}`;
+
+                // 作成された部屋に遷移
+                window.location.href = urlToNavigate; 
+
+                // 値をリセット
+                $('#viewer_name').val('');
+                $('#enter_room_id').val('');
+
+            }).catch(error => {
+                console.error("viewer情報の書き込みに失敗しました:", error);
+                alert("viewer情報の更新に失敗しました。コンソールを確認してください。");
+            
+            });
+        });
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>picaso atelier</title>
+    <link href="https://fonts.googleapis.com/css?family=Noto+Sans+JP" rel="stylesheet" />
+    <link rel="stylesheet" href="./css/picaso.css">
+<body>
+    <div id="atelier_room">
+        <section id="baseinfo_area">
+            <div id="atelier_name">
+            </div>
+
+            <div id="viewer_name_list">
+                見ている人<br>xxx
+            </div>
+        
+            <div id="timelimit_frame">
+                のこり時間
+                <p id="timelimit"></p>
+            </div>
+        </section>
+
+        <section id="drow_area">
+            <div id="palette_title">
+                xxxさんのさくひん
+            </div>
+            <canvas id="drow" width="500" height="500" style="background-color:#FBF9F1; box-shadow: 0px 4px 4px 0px rgba(0, 0, 0, 0.25); border-radius: 6px;"></canvas>
+        </section>
+
+        <section id="chat_area">
+            <div id="chat">
+                <div id="chat_rireki">
+                    chatりれき
+                </div>
+                <div id="chat_textbox">
+                    <input type="text" id="text_message" placeholder="テキストを入力">
+                    <button id="chat_send">そうしん</button>
+                </div>
+            </div>
+            <button id="go_top">おわる</button>
+        </section>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+
+        // DBに対してデータの追加や取得ができるようにする
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            serverTimestamp,
+            onSnapshot,
+            doc,
+            query,
+            orderBy,
+            updateDoc,
+        } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "",
+            authDomain: "picaso-93617.firebaseapp.com",
+            projectId: "picaso-93617",
+            storageBucket: "picaso-93617.firebasestorage.app",
+            messagingSenderId: "347456870584",
+            appId: "1:347456870584:web:1952358594e673580efc4d"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+
+        // 変数DBにfirestoreのインスタンスを入れる
+        const db = getFirestore(app);
+
+        // 共通のルームIDの定義
+        let currentRoomId = "";
+        let drawer_name ="";
+        let time_limit = 15;
+        // カウントダウン（setInterval）のIDを保持する変数
+        let cnDownTimerId = null; 
+
+        //描画の定義
+        const can = $("#drow")[0];
+        const ctx = can.getContext("2d");
+        let bold_line = 3; //ラインの太さをここで指定
+        let color = "#000000"; //ラインの色をここで指定
+
+        // 監視解除のための変数 (描画とチャット)
+        let chatSnapshotUnsubscribe;
+        let drawingSnapshotUnsubscribe;
+
+        // roomsデータ、chatデータ、描画データ取得処理
+        onSnapshot(collection(db, "rooms"), (querySnapshot) => {
+            // firestore 形式のデータである querySnapshot.docs を入力する
+            const documents = roomsDocuments(querySnapshot.docs);
+            // 配列形式のデータを出力する
+            const room_id = getRoomDataByUrlParameter(documents);
+            if (!room_id) {
+                 console.warn("対象のルームIDが見つかりません。");
+                 return;
+            }
+            currentRoomId = room_id[0];
+            drawer_name = room_id[1];
+            time_limit = room_id[2];
+            $("#atelier_name").html(room_id[1]+"さんの<br>アトリエ");
+            $("#palette_title").html(room_id[1]+"さんの作品");
+            $("#viewer_name_list").html("見ている人<br>"+room_id[3]);
+            $('#room_id').val(room_id[0]);
+            $('#timelimit').text(room_id[2]+"びょう");
+
+            // 同期ロジック
+            const status = room_id[4];
+            const startTime = room_id[5];
+            if (status === "playing" && startTime) {
+                // ゲームが開始されたら、同期カウントダウンを開始
+                startSyncedCountdown(startTime, time_limit);
+            } else if (status === "waiting") {
+                // 待機中（リセットされた）状態なら、タイマーを停止・リセット
+                resetGame();
+                $('#timelimit').text(time_limit + "びょう");
+            }
+
+            // 既存の監視を解除し、新しい currentRoomId で再設定する
+            if (chatSnapshotUnsubscribe) {
+                chatSnapshotUnsubscribe();
+                chatSnapshotUnsubscribe = null;
+            }
+            if (drawingSnapshotUnsubscribe) {
+                drawingSnapshotUnsubscribe();
+                drawingSnapshotUnsubscribe = null;
+            }
+
+            // chatデータを取得する処理
+            // データ取得処理
+            const q = query(collection(db, 'rooms', currentRoomId, 'chat'), orderBy("timestamp", "asc") );            
+            chatSnapshotUnsubscribe = onSnapshot(q, (querySnapshot) => {
+                // なぞのデータを綺麗なデータに変換
+                const documents=chatDocuments(querySnapshot.docs);
+                // きれいなデータをタグに変換
+                const elements_chat =chatElements(documents);
+                // タグを表示する
+                $('#chat_rireki').html(elements_chat);
+                // 最新メッセージが見えるようにスクロール
+                $('#chat_rireki').scrollTop($('#chat_rireki')[0].scrollHeight);
+            });
+
+            // 描画データを取得する処理
+            // データ取得処理
+            const drawing_data = query(collection(db, 'rooms', currentRoomId, 'drawing'), orderBy("timestamp", "asc") );            
+            drawingSnapshotUnsubscribe = onSnapshot(drawing_data, (querySnapshot) => {
+                // docChanges() を使って差分を取得し、描画関数に渡す
+                processDrawingEvents(querySnapshot.docChanges());
+            });
+
+        });
+
+        // chat送信処理
+        $('#chat_send').on('click',function(){
+            if(!currentRoomId){
+                alert("ルームIDが未設定のため、チャットを送信できません。");
+                return;
+            }
+
+            const data_chat={
+                // viewerの名前を入れる
+                user_name:getViewerNameFromUrl(),
+                message:$('#text_message').val(),
+                timestamp:serverTimestamp(),
+            }
+
+            // chatデータを保存
+            addDoc(collection(db, 'rooms', currentRoomId, 'chat'),data_chat);             
+            $('#text_message').val('');;
+        });
+
+        function convertTimestampToDatetime(timestamp) {
+            let date;
+            date = timestamp.toDate();
+
+            // 例: YYYY/MM/DD HH:MM形式で返す
+            const Y = date.getFullYear();
+            const M = ('0' + (date.getMonth() + 1)).slice(-2);
+            const D = ('0' + date.getDate()).slice(-2);
+            const h = ('0' + date.getHours()).slice(-2);
+            const m = ('0' + date.getMinutes()).slice(-2);
+            const s = ('0' + date.getSeconds()).slice(-2);
+            
+            return `${Y}/${M}/${D} ${h}:${m}`;
+        }
+
+        // 「Firestore 形式のデータ」を入力して「配列形式のデータ」を出力する関数を追加する
+        function roomsDocuments(fireStoreDocs) {
+            const documents_room = [];
+            fireStoreDocs.forEach(function (doc) {
+                const document_room = {
+                id: doc.id,
+                data: doc.data(),
+                };
+                documents_room.push(document_room);
+            });
+            return documents_room;
+        }
+
+        // 「配列形式のデータ」のデータとパラメータのroomIdで該当のデータを探す
+        function getRoomDataByUrlParameter(roomsDocuments) {
+            // URLパラメータ 'roomId' の取得
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetRoomId = urlParams.get('roomId');
+
+            // roomId が取得できなかった場合は処理を終了
+            if (!targetRoomId) {
+                console.error("URLパラメータ 'roomId' が見つかりません。");
+                return null;
+            }
+
+            // ドキュメントの検索/特定
+            const targetDocument = roomsDocuments.find(document => document.id === targetRoomId);
+            // ドキュメントが見つからなかった場合は処理を終了
+            if (!targetDocument) {
+                console.warn(`ドキュメント ID: ${targetRoomId} に合致するデータは見つかりませんでした。`);
+                return null;
+            }
+            
+            // 必要なデータの抽出
+            const data = targetDocument.data;
+
+            const elements_room = [
+                targetDocument.id,
+                data.drawer_name,
+                data.limit_seconds,
+                data.viewer_names,
+                data.status,
+                data.start_time,
+            ];
+            return elements_room;
+        }
+        
+        // 「Firestore 形式のデータ」を入力して「配列形式のデータ」を出力する関数を追加する
+        function chatDocuments(fireStoreDocs) {
+            const documents_chat = [];
+            fireStoreDocs.forEach(function (doc) {
+                const document_chat = {
+                id: doc.id,
+                data: doc.data(),
+            };
+            documents_chat.push(document_chat);
+            });
+            return documents_chat;
+        }
+
+        function chatElements(chatDocuments){
+            const elements_chat =[];
+            chatDocuments.forEach(function (document) {
+                elements_chat.push(`
+                <li id="${document.id}">
+                    <p class="name_date">${document.data.user_name} at ${convertTimestampToDatetime(document.data.timestamp)}</p>
+                    <p>${document.data.message}</p>
+                </li>
+                `);
+            });
+            return elements_chat;
+        }
+             
+        //go_top：HOMEに戻る
+        $('#go_top').on('click',function(){
+            window.location.href = 'index.html'; 
+        });
+
+        // リセット関数
+        function resetGame() {
+            // カウントダウン（setInterval）を停止
+            if (cnDownTimerId !== null) {
+                clearInterval(cnDownTimerId);
+                cnDownTimerId = null;
+            }
+            
+            // 画面のタイマー表示を初期値（time_limit）またはリセット状態に戻す
+            $('#timelimit').html('<p>0 びょう</p>');
+        }
+
+        // URLから名前を取得する関数
+        function getViewerNameFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+
+            //'user_type' パラメータの値を取得
+            const viewer_name = urlParams.get('user_name');
+
+            return viewer_name;
+        }
+
+
+        // canvas関係
+
+        //描画の関数
+        function drawLineOnCanvas(points, width, color) {
+            if (points.length < 4) return; // 2点未満は描画しない
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.beginPath();
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+
+            // 最初の点に移動
+            ctx.moveTo(points[0], points[1]);
+
+            // 残りの点を順に線でつなぐ
+            for (let i = 2; i < points.length; i += 2) {
+                ctx.lineTo(points[i], points[i + 1]);
+            }
+            
+            ctx.stroke();
+        }
+
+        // Canvas全体をクリアする関数
+        function clearCanvas() {
+            ctx.beginPath();
+            ctx.clearRect(0, 0, can.width, can.height);
+        }
+
+        // drawのデータを取得
+        function processDrawingEvents(changes) {
+            changes.forEach(change => {
+                // ADDED: 初回ロード時、または新しいドキュメントが追加されたとき
+                if (change.type === "added") {
+                    const data = change.doc.data().data; // dataフィールドの中身
+                    const operation_type = change.doc.data().operation_type;
+                    
+                    // ログタイプに応じて処理を振り分ける
+                    switch (operation_type) {
+                        case "line":
+                            // 線の再現
+                            drawLineOnCanvas(data.points, data.width, data.color);
+                            break;
+                        case "width_change":
+                            // 太さの変更
+                            bold_line = data.new_width;
+                            console.log(`太さを変更しました: ${bold_line}`);
+                            // 描画が始まっていないので、Canvasコンテキストの太さ変更は不要
+                            break;
+                        case "color_change":
+                            // 色の変更
+                            color = data.new_color;
+                            console.log(`色を変更しました: ${color}`);
+                            // 描画が始まっていないので、CanvasコンテキストのstrokeStyle変更は不要
+                            break;
+                        case "clear":
+                            // 全消去
+                            clearCanvas();
+                            console.log("Canvasをクリアしました。");
+                            break;
+                        default:
+                            console.warn(`不明な操作タイプ: ${operation_type}`);
+                    }
+                }
+            });
+        }
+
+        function startSyncedCountdown(startTime, limitSeconds) {
+        // すでにタイマーが動いていたら再設定しない
+        if (cnDownTimerId !== null) {
+            return;
+        }
+
+        // 経過時間を計算
+        const now = new Date();
+        const startDate = startTime.toDate(); // FirestoreのTimestampをDateオブジェクトに変換
+        const elapsedTimeMs = now.getTime() - startDate.getTime();
+        const totalLimitMs = limitSeconds * 1000;
+        
+        let remainingMs = totalLimitMs - elapsedTimeMs;
+
+        // 残り時間が0以下ならタイムアップ処理
+        if (remainingMs <= 0) {
+            resetGame();
+            alert("何を書いたか当ててください");
+            $('#timelimit').html('<p>0 びょう</p>');
+            return;
+        }
+
+        // 残り時間を秒単位で取得 (切り上げ)
+        let cnt = Math.ceil(remainingMs / 1000);
+
+        // カウントダウンを開始
+        $('#timelimit').html('<p>' + cnt + ' びょう</p>');
+
+        cnDownTimerId = setInterval(function() {
+            cnt--;
+            if (cnt <= 10 && cnt > 0) {
+                $('#timelimit').html('<p class="under10">' + cnt + ' びょう</p>');
+            } else if (cnt <= 0) {
+                clearInterval(cnDownTimerId);
+                cnDownTimerId = null;
+                resetGame();
+                alert("何を書いたか当ててください");
+                $('#timelimit').html('<p>0 びょう</p>');
+            } else {
+                $('#timelimit').html('<p>' + cnt + ' びょう</p>');
+            }
+        }, 1000);
+    }
+
+    </script>
+
+</body>
+</html>

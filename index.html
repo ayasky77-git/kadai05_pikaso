@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>picaso</title>
+    <link href="https://fonts.googleapis.com/css?family=Noto+Sans+JP" rel="stylesheet" />
+    <link rel="stylesheet" href="./css/picaso.css">
+<body>
+    <div id="main">
+        <img src="./images/logo.png" alt="logo" id="logo">
+        <div id="opening">
+            <button id="make_atelier">アトリエをつくる</button>
+            <button id="enter_atelier">アトリエにはいる</button>
+        </div>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>    
+    
+    <script>
+
+        // 画面遷移
+        $('#make_atelier').on('click',function () {  
+            window.location.href = 'settei.html'; 
+        });
+
+        $('#enter_atelier').on('click',function () {  
+            window.location.href = 'viewer.html'; 
+
+        });
+
+    </script>
+    
+</body>
+</html>
