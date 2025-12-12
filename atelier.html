@@ -93,11 +93,11 @@
         // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "",
-            authDomain: "picaso-93617.firebaseapp.com",
-            projectId: "picaso-93617",
-            storageBucket: "picaso-93617.firebasestorage.app",
-            messagingSenderId: "347456870584",
-            appId: "1:347456870584:web:1952358594e673580efc4d"
+            authDomain: "picaso2.firebaseapp.com",
+            projectId: "picaso2",
+            storageBucket: "picaso2.firebasestorage.app",
+            messagingSenderId: "590686795120",
+            appId: "1:590686795120:web:9e0f4a4ec86650ee840bb5"
         };
 
         // Initialize Firebase
@@ -373,24 +373,7 @@
         $('#clear_btn').on('click',async function(){
            ctx.beginPath();
            ctx.clearRect(0, 0, can.width, can.height);
-
-            if (!currentRoomId) {
-                console.error("ルームIDが未設定のため、クリアイベントを送信できません。");
-                return;
-            }
-            
-            // firebaseに送るデータの定義
-            const clearData = {
-                drawer_name: drawer_name,
-                operation_type: "clear",
-                timestamp: serverTimestamp(),
-                data: {}, // データは空のマップ
-            };
-            
-            // ドキュメントを追加、書き込み完了まで次の動作を待つ
-            await addDoc(collection(db, 'rooms', currentRoomId, 'drawing'), clearData);
-            
-            console.log("Firestoreにクリアイベントを送信しました。");
+        canvas_Clear();
         });
 
         // 線の太さ、回転の速さのスライダーの数値を表示させる
@@ -447,6 +430,8 @@
             ctx.clearRect(0, 0, can.width, can.height);
             odai_shuffle();
             countdown_flg=0;
+            canvas_Clear();
+            
             if(!confirm('もう1回やりますか？')){
                 return false;
         
@@ -551,6 +536,29 @@
             
             $('#odai_frame').html('おだい<br>『---』');
         }
+
+        // クリアイベントを送る関数
+        async function canvas_Clear() {
+            if (!currentRoomId) {
+                console.error("ルームIDが未設定のため、クリアイベントを送信できません。");
+                return;
+            }
+            
+            // firebaseに送るデータの定義
+            const clearData = {
+                drawer_name: drawer_name,
+                operation_type: "clear",
+                timestamp: serverTimestamp(),
+                data: {}, // データは空のマップ
+            };
+            
+            // ドキュメントを追加、書き込み完了まで次の動作を待つ
+            await addDoc(collection(db, 'rooms', currentRoomId, 'drawing'), clearData);
+            
+            console.log("Firestoreにクリアイベントを送信しました。");
+        }
+        
+        
 
     </script>
 
